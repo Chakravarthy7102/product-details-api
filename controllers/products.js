@@ -4,14 +4,14 @@ const ProductsModel = require("../models/ProductsModel");
 //testing route
 const getAllProductsStatic = async (req, res) => {
   const { select } = req.query;
-  const result = await ProductsModel.find().select(select).limit(5);
+  const result = await ProductsModel.find({ price: { $lt: 30 } });
   res.status(200).json({ noResult: result.length, result: { result } });
 };
 
 const getAllProducts = async (req, res) => {
   //making sure that the query params are only ones that are present in database not
   //any random params..
-  const { featured, company, name, sort, fields } = req.query;
+  const { featured, company, name, sort, fields, numericFilter } = req.query;
   //creating new params object that will pass in the valid params into the find
   const queryObject = {};
   //checking for the value of featured and setting it into the query object JMS
@@ -29,8 +29,31 @@ const getAllProducts = async (req, res) => {
     //https://docs.mongodb.com/manual/reference/operator/query/regex/
     queryObject.name = { $regex: name, $options: "i" };
   }
+  //numericFilter implementation
+  if (numericFilter) {
+    const operatorMap = {
+      ">": "$gt",
+      ">=": "$gte",
+      "=": "$eq",
+      "<": "$lt",
+      "<=": "$lte",
+    };
+    const regEx = /\b(>|>=|<|<=|=)\b/g;
+    let filters = numericFilter.replace(
+      regEx,
+      (match) => `-${operatorMap[match]}-`
+    );
+    console.log(filters);
+    const options = ["price", "rating"];
+    filters = filters.split(",").forEach((item) => {
+      const [field, operator, value] = item.split("-");
+      if (options.includes(field)) {
+        queryObject[field] = { [operator]: Number(value) };
+      }
+    });
+    console.log(queryObject);
+  }
 
-  console.log(queryObject);
   //removing the await because of addition chainning of the sort params
   let result = ProductsModel.find(queryObject);
 
@@ -56,9 +79,9 @@ const getAllProducts = async (req, res) => {
   const limit = req.query.limit * 1 || 10;
   const page = req.query.page * 1 || 1;
   const skipIndex = (page - 1) * limit;
-
   result = result.limit(limit).skip(skipIndex);
 
+  //driver
   const Products = await result; //use this await at the end of giving out the final result
   res.status(200).json({ noHits: Products.length, Products });
 };
